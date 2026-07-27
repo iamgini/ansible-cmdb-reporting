@@ -1,6 +1,6 @@
 <div class="container">
 
-  <!-- System Overview -->
+  <!-- 1. System Overview -->
   <div class="card">
     <div class="card-header">
       <h3>System Overview</h3>
@@ -19,11 +19,11 @@
         </thead>
         <tbody>
           <tr>
-            <td><strong>{{ ansible_hostname }}</strong></td>
+            <td><strong>{{ ansible_hostname | default('N/A') }}</strong></td>
             <td class="snippet">{{ ansible_fqdn | default('N/A') }}</td>
-            <td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td>
-            <td class="snippet">{{ ansible_kernel }}</td>
-            <td>{{ ansible_architecture }}</td>
+            <td>{{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}</td>
+            <td class="snippet">{{ ansible_kernel | default('N/A') }}</td>
+            <td>{{ ansible_architecture | default('N/A') }}</td>
             <td>
               {% set uptime = ansible_uptime_seconds | default(0) | int %}
               {% set days = uptime // 86400 %}
@@ -37,7 +37,82 @@
     </div>
   </div>
 
-  <!-- Network -->
+  <!-- 2. Date / Time / Timezone -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Date / Time / Timezone</h3>
+    </div>
+    <div class="card-body">
+      {% set dt = ansible_date_time | default({}) %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Timezone</th>
+            <th>UTC Offset</th>
+            <th>Epoch</th>
+            <th>ISO 8601</th>
+            <th>Weekday</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ dt.date | default('N/A') }}</td>
+            <td class="snippet">{{ dt.time | default('N/A') }}</td>
+            <td>{{ dt.tz | default('N/A') }}{% if dt.tz_dst is defined and dt.tz_dst != dt.tz | default('') %} (DST: {{ dt.tz_dst }}){% endif %}</td>
+            <td>{{ dt.tz_offset | default('N/A') }}</td>
+            <td class="snippet">{{ dt.epoch | default('N/A') }}</td>
+            <td class="snippet">{{ dt.iso8601 | default('N/A') }}</td>
+            <td>{{ dt.weekday | default('N/A') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. System Load -->
+  <div class="card">
+    <div class="card-header">
+      <h3>System Load</h3>
+    </div>
+    <div class="card-body">
+      {% set load = ansible_loadavg | default({}) %}
+      <table>
+        <thead>
+          <tr>
+            <th>Load 1m</th>
+            <th>Load 5m</th>
+            <th>Load 15m</th>
+            <th>vCPUs</th>
+            <th>Load per CPU (1m)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set vcpus = ansible_processor_vcpus | default(1) | int %}
+          {% set load1 = load['1m'] | default(0) | float %}
+          {% set load_per_cpu = (load1 / vcpus) | round(2) if vcpus > 0 else 0 %}
+          <tr>
+            <td><strong>{{ load['1m'] | default('N/A') }}</strong></td>
+            <td>{{ load['5m'] | default('N/A') }}</td>
+            <td>{{ load['15m'] | default('N/A') }}</td>
+            <td>{{ vcpus }}</td>
+            <td>
+              {% if load_per_cpu > 1.0 %}
+                <span class="badge badge-down">{{ load_per_cpu }}</span>
+              {% elif load_per_cpu > 0.7 %}
+                <span class="badge" style="background:#fef3c7;color:#92400e;">{{ load_per_cpu }}</span>
+              {% else %}
+                <span class="badge badge-up">{{ load_per_cpu }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 4. Network -->
   <div class="card">
     <div class="card-header">
       <h3>Network</h3>
@@ -51,7 +126,9 @@
             <th>MAC Address</th>
             <th>Interface</th>
             <th>All IPv4 Addresses</th>
+            <th>All IPv6 Addresses</th>
             <th>DNS Servers</th>
+            <th>DNS Search</th>
           </tr>
         </thead>
         <tbody>
@@ -61,13 +138,31 @@
             <td class="snippet">{{ ansible_default_ipv4.macaddress | default('N/A') }}</td>
             <td>{{ ansible_default_ipv4.interface | default('N/A') }}</td>
             <td>
-              {% for ip in ansible_all_ipv4_addresses %}
+              {% for ip in ansible_all_ipv4_addresses | default([]) %}
               <p class="snippet">{{ ip }}</p>
+              {% else %}
+              N/A
+              {% endfor %}
+            </td>
+            <td>
+              {% for ip in ansible_all_ipv6_addresses | default([]) %}
+              <p class="snippet" style="font-size:0.8em;">{{ ip }}</p>
+              {% else %}
+              N/A
               {% endfor %}
             </td>
             <td>
               {% for ns in ansible_dns.nameservers | default([]) %}
               <p class="snippet">{{ ns }}</p>
+              {% else %}
+              N/A
+              {% endfor %}
+            </td>
+            <td>
+              {% for s in ansible_dns.search | default([]) %}
+              <p>{{ s }}</p>
+              {% else %}
+              N/A
               {% endfor %}
             </td>
           </tr>
@@ -76,10 +171,10 @@
     </div>
   </div>
 
-  <!-- Network Interfaces -->
+  <!-- 5. Network Interfaces -->
   <div class="card">
     <div class="card-header">
-      <h3>Network Interfaces</h3>
+      <h3>Network Interfaces<span class="section-count">{{ ansible_interfaces | default([]) | length }}</span></h3>
     </div>
     <div class="card-body">
       <table>
@@ -90,6 +185,7 @@
             <th>Netmask</th>
             <th>MAC Address</th>
             <th>MTU</th>
+            <th>Speed</th>
             <th>Type</th>
             <th>Active</th>
           </tr>
@@ -115,22 +211,71 @@
             </td>
             <td class="snippet">{{ iface_detail.macaddress | default('N/A') }}</td>
             <td>{{ iface_detail.mtu | default('N/A') }}</td>
+            <td>{{ iface_detail.speed | default('N/A') }}{% if iface_detail.speed is defined %} Mbps{% endif %}</td>
             <td>{{ iface_detail.type | default('N/A') }}</td>
             <td>
               {% if iface_detail.active | default(false) %}
-                <span class="badge badge-up">Yes</span>
+                <span class="badge badge-up">Up</span>
               {% else %}
-                <span class="badge badge-down">No</span>
+                <span class="badge badge-down">Down</span>
               {% endif %}
             </td>
           </tr>
+          {% else %}
+          <tr><td colspan="8" class="na-text">N/A — No network interfaces detected</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- CPU / Processor -->
+  <!-- 6. Listening Ports -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Listening Ports{% if cmdb_listening_ports is defined and cmdb_listening_ports.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_listening_ports.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_listening_ports is defined and cmdb_listening_ports.rc | default(1) == 0 and cmdb_listening_ports.stdout_lines | default([]) | length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>Listen Address</th>
+            <th>Port</th>
+            <th>Process</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_listening_ports.stdout_lines %}
+          {% set fields = line.split('|') %}
+          <tr>
+            <td class="snippet">{{ fields[0] | default('N/A') }}</td>
+            <td><strong>{{ fields[1] | default('N/A') }}</strong></td>
+            <td>{{ fields[2] | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="na-text">N/A — Listening port information not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 7. Firewall Configuration -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Firewall Configuration</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_firewall is defined and cmdb_firewall.rc | default(1) == 0 and cmdb_firewall.stdout | default('') | trim != '' and cmdb_firewall.stdout | trim != 'NOT_AVAILABLE' %}
+      <pre class="pre-output">{{ cmdb_firewall.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — Firewall not configured or firewalld not installed</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 8. CPU / Processor -->
   <div class="card">
     <div class="card-header">
       <h3>Processor</h3>
@@ -159,7 +304,7 @@
     </div>
   </div>
 
-  <!-- Memory -->
+  <!-- 9. Memory -->
   <div class="card">
     <div class="card-header">
       <h3>Memory</h3>
@@ -202,10 +347,10 @@
     </div>
   </div>
 
-  <!-- Storage / Mounts -->
+  <!-- 10. Storage / Mounts -->
   <div class="card">
     <div class="card-header">
-      <h3>Storage / Mount Points</h3>
+      <h3>Storage / Mount Points<span class="section-count">{{ ansible_mounts | default([]) | length }}</span></h3>
     </div>
     <div class="card-body">
       <table>
@@ -229,8 +374,8 @@
           {% set disk_pct = (((total_gb - avail_gb) / total_gb) * 100) | int if total_gb > 0 else 0 %}
           <tr>
             <td><strong class="snippet">{{ mount.mount }}</strong></td>
-            <td class="snippet">{{ mount.device }}</td>
-            <td>{{ mount.fstype }}</td>
+            <td class="snippet">{{ mount.device | default('N/A') }}</td>
+            <td>{{ mount.fstype | default('N/A') }}</td>
             <td>{{ total_gb }} GB</td>
             <td>{{ used_gb }} GB</td>
             <td>{{ avail_gb }} GB</td>
@@ -242,13 +387,153 @@
             </td>
             <td style="font-size: 0.8em; max-width: 200px; word-break: break-all;">{{ mount.options | default('N/A') }}</td>
           </tr>
+          {% else %}
+          <tr><td colspan="8" class="na-text">N/A — No mount points detected</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Hardware -->
+  <!-- 11. Block Devices -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Block Devices<span class="section-count">{{ ansible_devices | default({}) | length }}</span></h3>
+    </div>
+    <div class="card-body">
+      {% if ansible_devices is defined and ansible_devices | length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Model</th>
+            <th>Vendor</th>
+            <th>Size</th>
+            <th>Type</th>
+            <th>Scheduler</th>
+            <th>Partitions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dev_name, dev in ansible_devices | default({}) | dictsort %}
+          <tr>
+            <td><strong>/dev/{{ dev_name }}</strong></td>
+            <td>{{ dev.model | default('N/A') }}</td>
+            <td>{{ dev.vendor | default('N/A') }}</td>
+            <td>{{ dev.size | default('N/A') }}</td>
+            <td>
+              {% if dev.rotational | default('1') == '0' %}
+                <span class="badge badge-up">SSD</span>
+              {% elif dev.rotational | default('1') == '1' and dev.model | default('') != '' %}
+                <span class="badge badge-info">HDD</span>
+              {% else %}
+                N/A
+              {% endif %}
+              {% if dev.virtual | default(0) | int == 1 %}
+                <span class="badge badge-info">Virtual</span>
+              {% endif %}
+            </td>
+            <td>{{ dev.scheduler_mode | default('N/A') }}</td>
+            <td>
+              {% if dev.partitions is defined and dev.partitions | length > 0 %}
+                {% for part_name, part in dev.partitions | dictsort %}
+                <span class="badge badge-info">{{ part_name }} ({{ part.size | default('N/A') }})</span>
+                {% endfor %}
+              {% else %}
+                N/A
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="na-text">N/A — No block devices detected</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 12. LVM -->
+  <div class="card">
+    <div class="card-header">
+      <h3>LVM (Logical Volume Manager)</h3>
+    </div>
+    <div class="card-body">
+      {% if ansible_lvm is defined and ansible_lvm is mapping and ansible_lvm.vgs is defined and ansible_lvm.vgs | length > 0 %}
+      <h4 style="padding: 10px 25px 5px; font-size: 0.9em; color: #475569;">Volume Groups</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>VG Name</th>
+            <th>Size</th>
+            <th>Free</th>
+            <th>Physical Volumes</th>
+            <th>Logical Volumes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vg_name, vg in ansible_lvm.vgs | dictsort %}
+          <tr>
+            <td><strong>{{ vg_name }}</strong></td>
+            <td>{{ vg.size_g | default('N/A') }} GB</td>
+            <td>{{ vg.free_g | default('N/A') }} GB</td>
+            <td>{{ vg.num_pvs | default('N/A') }}</td>
+            <td>{{ vg.num_lvs | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if ansible_lvm.lvs is defined and ansible_lvm.lvs | length > 0 %}
+      <h4 style="padding: 10px 25px 5px; font-size: 0.9em; color: #475569;">Logical Volumes</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>LV Name</th>
+            <th>Size</th>
+            <th>Volume Group</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lv_name, lv in ansible_lvm.lvs | dictsort %}
+          <tr>
+            <td><strong>{{ lv_name }}</strong></td>
+            <td>{{ lv.size_g | default('N/A') }} GB</td>
+            <td>{{ lv.vg | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if ansible_lvm.pvs is defined and ansible_lvm.pvs | length > 0 %}
+      <h4 style="padding: 10px 25px 5px; font-size: 0.9em; color: #475569;">Physical Volumes</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>PV Device</th>
+            <th>Size</th>
+            <th>Free</th>
+            <th>Volume Group</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pv_name, pv in ansible_lvm.pvs | dictsort %}
+          <tr>
+            <td class="snippet"><strong>{{ pv_name }}</strong></td>
+            <td>{{ pv.size_g | default('N/A') }} GB</td>
+            <td>{{ pv.free_g | default('N/A') }} GB</td>
+            <td>{{ pv.vg | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% else %}
+      <p class="na-text">N/A — LVM not configured on this system</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 13. Hardware -->
   <div class="card">
     <div class="card-header">
       <h3>Hardware</h3>
@@ -259,27 +544,69 @@
           <tr>
             <th>System Vendor</th>
             <th>Product Name</th>
+            <th>Product Version</th>
+            <th>Product Serial</th>
+            <th>Product UUID</th>
             <th>Form Factor</th>
-            <th>BIOS Vendor</th>
-            <th>BIOS Version</th>
-            <th>BIOS Date</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>{{ ansible_system_vendor | default('N/A') }}</td>
             <td>{{ ansible_product_name | default('N/A') }}</td>
+            <td>{{ ansible_product_version | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_product_serial | default('N/A') }}</td>
+            <td class="snippet" style="font-size:0.8em;">{{ ansible_product_uuid | default('N/A') }}</td>
             <td>{{ ansible_form_factor | default('N/A') }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>BIOS Vendor</th>
+            <th>BIOS Version</th>
+            <th>BIOS Date</th>
+            <th>Board Name</th>
+            <th>Board Vendor</th>
+            <th>Board Serial</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
             <td>{{ ansible_bios_vendor | default('N/A') }}</td>
             <td>{{ ansible_bios_version | default('N/A') }}</td>
             <td>{{ ansible_bios_date | default('N/A') }}</td>
+            <td>{{ ansible_board_name | default('N/A') }}</td>
+            <td>{{ ansible_board_vendor | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_board_serial | default('N/A') }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Chassis Vendor</th>
+            <th>Chassis Version</th>
+            <th>Chassis Serial</th>
+            <th>Chassis Asset Tag</th>
+            <th>Board Asset Tag</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ ansible_chassis_vendor | default('N/A') }}</td>
+            <td>{{ ansible_chassis_version | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_chassis_serial | default('N/A') }}</td>
+            <td>{{ ansible_chassis_asset_tag | default('N/A') }}</td>
+            <td>{{ ansible_board_asset_tag | default('N/A') }}</td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Virtualization -->
+  <!-- 14. Virtualization -->
   <div class="card">
     <div class="card-header">
       <h3>Virtualization</h3>
@@ -316,7 +643,7 @@
     </div>
   </div>
 
-  <!-- Operating System Details -->
+  <!-- 15. Operating System Details -->
   <div class="card">
     <div class="card-header">
       <h3>Operating System</h3>
@@ -327,22 +654,22 @@
           <tr>
             <th>Distribution</th>
             <th>Version</th>
+            <th>Major Version</th>
             <th>Release</th>
             <th>OS Family</th>
             <th>Kernel</th>
-            <th>Kernel Version</th>
             <th>Package Manager</th>
             <th>Service Manager</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>{{ ansible_distribution }}</strong></td>
-            <td>{{ ansible_distribution_version }}</td>
+            <td><strong>{{ ansible_distribution | default('N/A') }}</strong></td>
+            <td>{{ ansible_distribution_version | default('N/A') }}</td>
+            <td>{{ ansible_distribution_major_version | default('N/A') }}</td>
             <td>{{ ansible_distribution_release | default('N/A') }}</td>
             <td>{{ ansible_os_family | default('N/A') }}</td>
-            <td class="snippet">{{ ansible_kernel }}</td>
-            <td class="snippet">{{ ansible_kernel_version | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_kernel | default('N/A') }}</td>
             <td>{{ ansible_pkg_mgr | default('N/A') }}</td>
             <td>{{ ansible_service_mgr | default('N/A') }}</td>
           </tr>
@@ -351,7 +678,66 @@
     </div>
   </div>
 
-  <!-- Security -->
+  <!-- 16. Boot Parameters -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Boot Parameters</h3>
+    </div>
+    <div class="card-body">
+      {% if ansible_cmdline is defined and ansible_cmdline | length > 0 %}
+      <table class="kv-table">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, value in ansible_cmdline | dictsort %}
+          <tr>
+            <td class="snippet"><strong>{{ key }}</strong></td>
+            <td class="snippet">{{ value | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="na-text">N/A — Boot parameters not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 17. Kernel Tunables -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Kernel Tunables (sysctl)</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_sysctl is defined and cmdb_sysctl.rc | default(1) == 0 and cmdb_sysctl.stdout_lines | default([]) | length > 0 %}
+      <table class="kv-table">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_sysctl.stdout_lines %}
+          {% set parts = line.split(' = ') %}
+          <tr>
+            <td class="snippet"><strong>{{ parts[0] | default('N/A') }}</strong></td>
+            <td class="snippet">{{ parts[1] | default('N/A') if parts | length > 1 else 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="na-text">N/A — Kernel tunables not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 18. Security -->
   <div class="card">
     <div class="card-header">
       <h3>Security</h3>
@@ -362,7 +748,9 @@
           <tr>
             <th>SELinux Status</th>
             <th>SELinux Mode</th>
+            <th>SELinux Config Mode</th>
             <th>SELinux Type</th>
+            <th>SELinux Policy Version</th>
             <th>AppArmor Status</th>
             <th>FIPS Mode</th>
           </tr>
@@ -376,8 +764,19 @@
                 <span class="badge badge-down">Disabled</span>
               {% endif %}
             </td>
-            <td>{{ ansible_selinux.mode | default('N/A') }}</td>
+            <td>
+              {% set semode = ansible_selinux.mode | default('N/A') %}
+              {% if semode == 'enforcing' %}
+                <span class="badge badge-up">{{ semode }}</span>
+              {% elif semode == 'permissive' %}
+                <span class="badge" style="background:#fef3c7;color:#92400e;">{{ semode }}</span>
+              {% else %}
+                {{ semode }}
+              {% endif %}
+            </td>
+            <td>{{ ansible_selinux.config_mode | default('N/A') }}</td>
             <td>{{ ansible_selinux.type | default('N/A') }}</td>
+            <td>{{ ansible_selinux.policyvers | default('N/A') }}</td>
             <td>
               {% if ansible_apparmor.status | default('disabled') == 'enabled' %}
                 <span class="badge badge-up">Enabled</span>
@@ -398,7 +797,312 @@
     </div>
   </div>
 
-  <!-- Python & Environment -->
+  <!-- 19. RHSM Subscription -->
+  <div class="card">
+    <div class="card-header">
+      <h3>RHSM Subscription</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_rhsm is defined and cmdb_rhsm.rc | default(1) == 0 and cmdb_rhsm.stdout | default('') | trim != '' and cmdb_rhsm.stdout | trim != 'NOT_AVAILABLE' %}
+      <pre class="pre-output">{{ cmdb_rhsm.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — subscription-manager not installed or system not registered</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 20. SSL Certificates -->
+  <div class="card">
+    <div class="card-header">
+      <h3>SSL / TLS Certificates{% if cmdb_ssl_certs is defined and cmdb_ssl_certs.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_ssl_certs.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_ssl_certs is defined and cmdb_ssl_certs.rc | default(1) == 0 and cmdb_ssl_certs.stdout_lines | default([]) | length > 0 %}
+      <div class="scrollable-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Certificate Path</th>
+            <th>Subject</th>
+            <th>Issuer</th>
+            <th>Expiry Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_ssl_certs.stdout_lines %}
+          {% set fields = line.split('|') %}
+          <tr>
+            <td class="snippet" style="font-size:0.8em;">{{ fields[0] | default('N/A') }}</td>
+            <td style="font-size:0.85em;">{{ fields[1] | default('N/A') }}</td>
+            <td style="font-size:0.85em;">{{ fields[2] | default('N/A') }}</td>
+            <td class="snippet">{{ fields[3] | default('N/A') if fields | length > 3 else 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="na-text">N/A — No SSL/TLS certificates found</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 21. Time Sync / NTP -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Time Synchronization</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_timesync is defined and cmdb_timesync.rc | default(1) == 0 and cmdb_timesync.stdout | default('') | trim != '' and cmdb_timesync.stdout | trim != 'NOT_AVAILABLE' %}
+      <pre class="pre-output">{{ cmdb_timesync.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — Time sync service (chrony/NTP) not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 22. Patch History -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Patch History &amp; Reboot</h3>
+    </div>
+    <div class="card-body">
+      <table class="kv-table">
+        <tbody>
+          <tr>
+            <td><strong>Last Reboot</strong></td>
+            <td>
+              {% if cmdb_last_reboot is defined and cmdb_last_reboot.stdout | default('') | trim != '' %}
+                {{ cmdb_last_reboot.stdout | trim }}
+              {% else %}
+                N/A
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td><strong>System Uptime</strong></td>
+            <td>
+              {% set uptime = ansible_uptime_seconds | default(0) | int %}
+              {% set days = uptime // 86400 %}
+              {% set hours = (uptime % 86400) // 3600 %}
+              {% set mins = (uptime % 3600) // 60 %}
+              {{ days }} days, {{ hours }} hours, {{ mins }} minutes ({{ uptime }} seconds)
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      {% if cmdb_recent_patches is defined and cmdb_recent_patches.rc | default(1) == 0 and cmdb_recent_patches.stdout | default('') | trim != '' %}
+      <h4 style="padding: 10px 25px 5px; font-size: 0.9em; color: #475569;">Recently Installed / Updated Packages</h4>
+      <pre class="pre-output">{{ cmdb_recent_patches.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — Package update history not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 23. Installed Packages -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Installed Packages{% if cmdb_packages is defined and cmdb_packages.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_packages.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_packages is defined and cmdb_packages.rc | default(1) == 0 and cmdb_packages.stdout_lines | default([]) | length > 0 %}
+      <div class="scrollable-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Package Name</th>
+            <th>Version</th>
+            <th>Architecture</th>
+            <th>Install Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_packages.stdout_lines %}
+          {% set fields = line.split('|') %}
+          <tr>
+            <td><strong>{{ fields[0] | default('N/A') }}</strong></td>
+            <td class="snippet">{{ fields[1] | default('N/A') }}</td>
+            <td>{{ fields[2] | default('N/A') if fields | length > 2 else 'N/A' }}</td>
+            <td>{{ fields[3] | default('N/A') if fields | length > 3 else 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="na-text">N/A — Package information not available (rpm not found)</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 24. Running Services -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Running Services{% if cmdb_services is defined and cmdb_services.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_services.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_services is defined and cmdb_services.rc | default(1) == 0 and cmdb_services.stdout_lines | default([]) | length > 0 %}
+      <div class="scrollable-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Service Unit</th>
+            <th>State</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_services.stdout_lines %}
+          {% set fields = line.split('|') %}
+          <tr>
+            <td class="snippet"><strong>{{ fields[0] | default('N/A') }}</strong></td>
+            <td>
+              {% set svc_state = fields[1] | default('unknown') | trim %}
+              {% if svc_state == 'running' %}
+                <span class="badge badge-up">{{ svc_state }}</span>
+              {% else %}
+                <span class="badge badge-info">{{ svc_state }}</span>
+              {% endif %}
+            </td>
+            <td>{{ fields[2] | default('N/A') if fields | length > 2 else 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="na-text">N/A — Service information not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 25. Enabled Services -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Enabled Services (Boot){% if cmdb_enabled_services is defined and cmdb_enabled_services.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_enabled_services.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_enabled_services is defined and cmdb_enabled_services.rc | default(1) == 0 and cmdb_enabled_services.stdout_lines | default([]) | length > 0 %}
+      <div class="scrollable-section" style="padding: 15px 25px;">
+        {% for svc in cmdb_enabled_services.stdout_lines %}
+        <span class="badge badge-info" style="margin: 2px;">{{ svc }}</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="na-text">N/A — Enabled services information not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 26. Systemd Timers -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Systemd Timers</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_timers is defined and cmdb_timers.rc | default(1) == 0 and cmdb_timers.stdout | default('') | trim != '' %}
+      <pre class="pre-output">{{ cmdb_timers.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — Systemd timers not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 27. Cron Jobs -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Cron Jobs{% if cmdb_cron_jobs is defined and cmdb_cron_jobs.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_cron_jobs.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_cron_jobs is defined and cmdb_cron_jobs.rc | default(1) == 0 and cmdb_cron_jobs.stdout_lines | default([]) | length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>User / Source</th>
+            <th>Schedule / Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_cron_jobs.stdout_lines %}
+          {% set fields = line.split('|', 1) %}
+          <tr>
+            <td><strong>{{ fields[0] | default('N/A') }}</strong></td>
+            <td class="snippet" style="font-size:0.85em;">{{ fields[1] | default('N/A') if fields | length > 1 else 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="na-text">N/A — No cron jobs found</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 28. User Accounts -->
+  <div class="card">
+    <div class="card-header">
+      <h3>User Accounts{% if cmdb_users is defined and cmdb_users.stdout_lines | default([]) | length > 0 %}<span class="section-count">{{ cmdb_users.stdout_lines | length }}</span>{% endif %}</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_users is defined and cmdb_users.rc | default(1) == 0 and cmdb_users.stdout_lines | default([]) | length > 0 %}
+      <div class="scrollable-section">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>UID</th>
+            <th>GID</th>
+            <th>Home Directory</th>
+            <th>Shell</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in cmdb_users.stdout_lines %}
+          {% set fields = line.split('|') %}
+          {% set uid = fields[1] | default('0') | int %}
+          <tr>
+            <td><strong>{{ fields[0] | default('N/A') }}</strong></td>
+            <td>{{ fields[1] | default('N/A') }}</td>
+            <td>{{ fields[2] | default('N/A') if fields | length > 2 else 'N/A' }}</td>
+            <td class="snippet">{{ fields[3] | default('N/A') if fields | length > 3 else 'N/A' }}</td>
+            <td class="snippet">{{ fields[4] | default('N/A') if fields | length > 4 else 'N/A' }}</td>
+            <td>
+              {% if uid == 0 %}
+                <span class="badge badge-down">root</span>
+              {% elif uid < 1000 %}
+                <span class="badge badge-info">system</span>
+              {% else %}
+                <span class="badge badge-up">user</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="na-text">N/A — User account information not available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 29. Containers -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Container Runtime</h3>
+    </div>
+    <div class="card-body">
+      {% if cmdb_containers is defined and cmdb_containers.rc | default(1) == 0 and cmdb_containers.stdout | default('') | trim != '' and cmdb_containers.stdout | trim != 'NOT_AVAILABLE' %}
+      <pre class="pre-output">{{ cmdb_containers.stdout }}</pre>
+      {% else %}
+      <p class="na-text">N/A — No container runtime (podman/docker) installed</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 30. Python & Environment -->
   <div class="card">
     <div class="card-header">
       <h3>Environment</h3>
@@ -408,6 +1112,7 @@
         <thead>
           <tr>
             <th>Python Version</th>
+            <th>Python Path</th>
             <th>System</th>
             <th>Machine ID</th>
             <th>Domain</th>
@@ -417,13 +1122,15 @@
         <tbody>
           <tr>
             <td class="snippet">{{ ansible_python_version | default('N/A') }}</td>
-            <td>{{ ansible_system | default('N/A') }}</td>
+            <td class="snippet" style="font-size:0.85em;">{{ ansible_python.executable | default('N/A') }}</td>
+            <td>{{ ansible_system | default('N/A') }} {{ ansible_userspace_bits | default('') }}-bit</td>
             <td class="snippet" style="font-size: 0.8em;">{{ ansible_machine_id | default('N/A') }}</td>
             <td>{{ ansible_domain | default('N/A') }}</td>
             <td>
               {% for grp in group_names | default([]) %}
               <span class="badge badge-info">{{ grp }}</span>
               {% endfor %}
+              {% if not group_names | default([]) %}N/A{% endif %}
             </td>
           </tr>
         </tbody>

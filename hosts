@@ -24,6 +24,24 @@ http_port = 80
 dbserver01 ansible_host=192.168.57.3 ansible_user=devops
 dbserver02 ansible_host=192.168.57.3 ansible_user=devops
 
+[appserver]
+appserver01 ansible_host=192.168.57.3 ansible_user=devops
+appserver02 ansible_host=192.168.57.3 ansible_user=devops
+appserver03 ansible_host=192.168.57.3 ansible_user=devops
+
+[monitoring]
+prometheus01 ansible_host=192.168.57.3 ansible_user=devops
+grafana01 ansible_host=192.168.57.3 ansible_user=devops
+
+[loadbalancer]
+haproxy01 ansible_host=192.168.57.3 ansible_user=devops
+haproxy02 ansible_host=192.168.57.3 ansible_user=devops
+
+[storage]
+nfs-server01 ansible_host=192.168.57.3 ansible_user=devops
+ceph-node01 ansible_host=192.168.57.3 ansible_user=devops
+ceph-node02 ansible_host=192.168.57.3 ansible_user=devops
+
 [report]
 rhel9-utils-1 ansible_host=192.168.57.10 ansible_user=devops
 
@@ -32,3 +50,7 @@ rhel8
 utils
 web
 dbserver
+appserver
+monitoring
+loadbalancer
+storage

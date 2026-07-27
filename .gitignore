@@ -1,4 +1,14 @@
 *.tar.gz
-# */artifacts/*
+artifacts/
+*/artifacts/*
 ansible-navigator.log
 */context/*
+*.retry
+collections/
+__pycache__/
+*.pyc
+.env
+.vault_pass
+*.swp
+*.swo
+*~

@@ -9,6 +9,202 @@
       ansible.builtin.set_fact:
         date_time_text: "{{ lookup('pipe','date +%Y-%m-%d_%H-%M-%S') | string }}"
 
+    # --- Custom CMDB data gathering ---
+
+    - name: Gather installed packages
+      ansible.builtin.shell: |
+        rpm -qa --qf '%{NAME}|%{VERSION}-%{RELEASE}|%{ARCH}|%{INSTALLTIME:date}\n' 2>/dev/null | sort -t'|' -k1 || true
+      register: cmdb_packages
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather running services
+      ansible.builtin.shell: |
+        systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | awk '{
+          unit=$1; sub_state=$4
+          desc=""
+          for(i=5;i<=NF;i++) desc=desc" "$i
+          sub(/^ /,"",desc)
+          print unit"|"sub_state"|"desc
+        }' || true
+      register: cmdb_services
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather enabled services
+      ansible.builtin.shell: |
+        systemctl list-unit-files --type=service --state=enabled --no-pager --no-legend 2>/dev/null | awk '{print $1}' || true
+      register: cmdb_enabled_services
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather listening ports
+      ansible.builtin.shell: |
+        ss -tlnp 2>/dev/null | awk 'NR>1 {
+          addr=$4
+          n=split(addr,a,":")
+          port=a[n]
+          ip=addr
+          sub(":"port"$","",ip)
+          if(ip=="") ip="*"
+          proc=$6
+          sub(/^users:\(\("/,"",proc)
+          sub(/".*/,"",proc)
+          if(proc=="") proc="N/A"
+          print ip"|"port"|"proc
+        }' || true
+      register: cmdb_listening_ports
+      changed_when: false
+      ignore_errors: true
+      become: true
+
+    - name: Gather user accounts
+      ansible.builtin.shell: |
+        awk -F: '{print $1"|"$3"|"$4"|"$6"|"$7}' /etc/passwd 2>/dev/null || true
+      register: cmdb_users
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather cron jobs
+      ansible.builtin.shell: |
+        for user in $(cut -d: -f1 /etc/passwd 2>/dev/null); do
+          crontab -l -u "$user" 2>/dev/null | grep -v '^#' | grep -v '^$' | sed "s/^/${user}|/" || true
+        done
+        for f in /etc/cron.d/*; do
+          [ -f "$f" ] && grep -v '^#' "$f" 2>/dev/null | grep -v '^$' | sed "s|^|${f}||" || true
+        done
+        true
+      register: cmdb_cron_jobs
+      changed_when: false
+      ignore_errors: true
+      become: true
+
+    - name: Gather firewall configuration
+      ansible.builtin.shell: |
+        if command -v firewall-cmd &>/dev/null; then
+          firewall-cmd --list-all 2>/dev/null || echo "Firewall is not running"
+        else
+          echo "NOT_AVAILABLE"
+        fi
+      register: cmdb_firewall
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather RHSM subscription status
+      ansible.builtin.shell: |
+        if command -v subscription-manager &>/dev/null; then
+          echo "=== Identity ==="
+          subscription-manager identity 2>/dev/null || echo "Not registered"
+          echo ""
+          echo "=== Status ==="
+          subscription-manager status 2>/dev/null || echo "Unknown"
+          echo ""
+          echo "=== Consumed Subscriptions ==="
+          subscription-manager list --consumed 2>/dev/null | head -30 || echo "None"
+        else
+          echo "NOT_AVAILABLE"
+        fi
+      register: cmdb_rhsm
+      changed_when: false
+      ignore_errors: true
+      become: true
+
+    - name: Gather time sync status
+      ansible.builtin.shell: |
+        if command -v chronyc &>/dev/null; then
+          echo "PROVIDER:chrony"
+          chronyc tracking 2>/dev/null
+        elif command -v timedatectl &>/dev/null; then
+          echo "PROVIDER:timedatectl"
+          timedatectl status 2>/dev/null
+        else
+          echo "NOT_AVAILABLE"
+        fi
+      register: cmdb_timesync
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather recent package updates
+      ansible.builtin.shell: |
+        rpm -qa --last 2>/dev/null | head -15 || true
+      register: cmdb_recent_patches
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather last reboot time
+      ansible.builtin.shell: |
+        who -b 2>/dev/null | awk '{print $3, $4}' || true
+      register: cmdb_last_reboot
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather container runtime info
+      ansible.builtin.shell: |
+        if command -v podman &>/dev/null; then
+          echo "RUNTIME:podman"
+          podman --version 2>/dev/null
+          echo "---CONTAINERS---"
+          podman ps -a 2>/dev/null || true
+          echo "---IMAGES---"
+          podman images 2>/dev/null || true
+        elif command -v docker &>/dev/null; then
+          echo "RUNTIME:docker"
+          docker --version 2>/dev/null
+          echo "---CONTAINERS---"
+          docker ps -a 2>/dev/null || true
+          echo "---IMAGES---"
+          docker images 2>/dev/null || true
+        else
+          echo "NOT_AVAILABLE"
+        fi
+      register: cmdb_containers
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather kernel tunables
+      ansible.builtin.shell: |
+        sysctl \
+          net.ipv4.ip_forward \
+          net.ipv4.conf.all.forwarding \
+          net.ipv4.tcp_syncookies \
+          net.ipv4.conf.all.rp_filter \
+          net.ipv4.conf.all.accept_redirects \
+          net.ipv4.conf.all.send_redirects \
+          net.ipv4.icmp_echo_ignore_broadcasts \
+          kernel.hostname \
+          kernel.domainname \
+          kernel.ostype \
+          kernel.osrelease \
+          kernel.sysrq \
+          vm.swappiness \
+          vm.overcommit_memory \
+          vm.dirty_ratio \
+          2>/dev/null || true
+      register: cmdb_sysctl
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather SSL certificates
+      ansible.builtin.shell: |
+        for cert in $(find /etc/pki/tls/certs/ /etc/ssl/certs/ -maxdepth 1 \( -name '*.pem' -o -name '*.crt' \) -type f 2>/dev/null | head -25); do
+          expiry=$(openssl x509 -enddate -noout -in "$cert" 2>/dev/null | sed 's/notAfter=//')
+          subject=$(openssl x509 -subject -noout -in "$cert" 2>/dev/null | sed 's/subject= *//')
+          issuer=$(openssl x509 -issuer -noout -in "$cert" 2>/dev/null | sed 's/issuer= *//')
+          if [ -n "$expiry" ]; then
+            echo "${cert}|${subject}|${issuer}|${expiry}"
+          fi
+        done
+      register: cmdb_ssl_certs
+      changed_when: false
+      ignore_errors: true
+
+    - name: Gather systemd timers
+      ansible.builtin.shell: |
+        systemctl list-timers --all --no-pager 2>/dev/null | head -35 || true
+      register: cmdb_timers
+      changed_when: false
+      ignore_errors: true
+
     - name: Ensure report output directory exists
       ansible.builtin.file:
         path: "{{ system_report_path }}"

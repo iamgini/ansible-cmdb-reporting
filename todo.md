@@ -11,6 +11,7 @@
 
 - [ ] Enrich HTML reports with more Ansible facts (memory, disk/mounts, network interfaces, etc.)
 - [ ] Improve index page (sortable columns, human-readable dates, file sizes)
+- [ ] Align HTML styling with Red Hat Design System — https://ux.redhat.com/elements/
 
 ## Visualization
 

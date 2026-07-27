@@ -1,0 +1,77 @@
+---
+- name: Generate CMDB reports
+  hosts: "{{ target_nodes | default('no-such-hosts') }}"
+  vars:
+    system_report_path: '/var/www/cmdb-reports'
+    report_server: "{{ groups['report'][0] }}"
+  tasks:
+    - name: Set generation timestamp
+      ansible.builtin.set_fact:
+        date_time_text: "{{ lookup('pipe','date +%Y-%m-%d_%H-%M-%S') | string }}"
+
+    - name: Ensure report output directory exists
+      ansible.builtin.file:
+        path: "{{ system_report_path }}"
+        state: directory
+        mode: '0755'
+        setype: httpd_sys_content_t
+      delegate_to: "{{ report_server }}"
+      become: true
+      run_once: true
+
+    - name: Configure nginx to serve CMDB reports
+      ansible.builtin.copy:
+        content: |
+          location /cmdb-reports/ {
+              alias /var/www/cmdb-reports/;
+              autoindex on;
+          }
+        dest: /etc/nginx/default.d/cmdb-reports.conf
+        mode: '0644'
+      delegate_to: "{{ report_server }}"
+      become: true
+      run_once: true
+      notify: Reload nginx
+
+    - name: Generate per-host report
+      ansible.builtin.template:
+        src: system-report.html
+        dest: "{{ system_report_path }}/{{ inventory_hostname }}.html"
+        mode: '0644'
+        setype: httpd_sys_content_t
+        force: true
+      vars:
+        report_title: "{{ inventory_hostname }}"
+      delegate_to: "{{ report_server }}"
+      become: true
+
+    - name: Find generated reports
+      ansible.builtin.find:
+        paths: "{{ system_report_path }}/"
+        recurse: false
+        patterns: "*.html"
+        excludes: 'index.html'
+      register: html_files_to_index
+      delegate_to: "{{ report_server }}"
+      run_once: true
+
+    - name: Generate index page
+      ansible.builtin.template:
+        src: system-report-index.html
+        dest: "{{ system_report_path }}/index.html"
+        mode: '0644'
+        setype: httpd_sys_content_t
+        force: true
+      vars:
+        report_title: "Home"
+      delegate_to: "{{ report_server }}"
+      become: true
+      run_once: true
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+      delegate_to: "{{ report_server }}"
+      become: true

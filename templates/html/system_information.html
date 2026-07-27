@@ -1,0 +1,434 @@
+<div class="container">
+
+  <!-- System Overview -->
+  <div class="card">
+    <div class="card-header">
+      <h3>System Overview</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Hostname</th>
+            <th>FQDN</th>
+            <th>OS</th>
+            <th>Kernel</th>
+            <th>Architecture</th>
+            <th>Uptime</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{ ansible_hostname }}</strong></td>
+            <td class="snippet">{{ ansible_fqdn | default('N/A') }}</td>
+            <td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td>
+            <td class="snippet">{{ ansible_kernel }}</td>
+            <td>{{ ansible_architecture }}</td>
+            <td>
+              {% set uptime = ansible_uptime_seconds | default(0) | int %}
+              {% set days = uptime // 86400 %}
+              {% set hours = (uptime % 86400) // 3600 %}
+              {% set mins = (uptime % 3600) // 60 %}
+              {{ days }}d {{ hours }}h {{ mins }}m
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Network -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Network</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Default IPv4</th>
+            <th>Gateway</th>
+            <th>MAC Address</th>
+            <th>Interface</th>
+            <th>All IPv4 Addresses</th>
+            <th>DNS Servers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="snippet">{{ ansible_default_ipv4.address | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_default_ipv4.gateway | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_default_ipv4.macaddress | default('N/A') }}</td>
+            <td>{{ ansible_default_ipv4.interface | default('N/A') }}</td>
+            <td>
+              {% for ip in ansible_all_ipv4_addresses %}
+              <p class="snippet">{{ ip }}</p>
+              {% endfor %}
+            </td>
+            <td>
+              {% for ns in ansible_dns.nameservers | default([]) %}
+              <p class="snippet">{{ ns }}</p>
+              {% endfor %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Network Interfaces -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Network Interfaces</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Interface</th>
+            <th>IPv4 Address</th>
+            <th>Netmask</th>
+            <th>MAC Address</th>
+            <th>MTU</th>
+            <th>Type</th>
+            <th>Active</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for iface in ansible_interfaces | default([]) | sort %}
+          {% set iface_detail = hostvars[inventory_hostname]['ansible_' + iface] | default({}) %}
+          <tr>
+            <td><strong>{{ iface }}</strong></td>
+            <td class="snippet">
+              {% if iface_detail.ipv4 is defined %}
+                {{ iface_detail.ipv4.address | default('N/A') }}
+              {% else %}
+                N/A
+              {% endif %}
+            </td>
+            <td class="snippet">
+              {% if iface_detail.ipv4 is defined %}
+                {{ iface_detail.ipv4.netmask | default('N/A') }}
+              {% else %}
+                N/A
+              {% endif %}
+            </td>
+            <td class="snippet">{{ iface_detail.macaddress | default('N/A') }}</td>
+            <td>{{ iface_detail.mtu | default('N/A') }}</td>
+            <td>{{ iface_detail.type | default('N/A') }}</td>
+            <td>
+              {% if iface_detail.active | default(false) %}
+                <span class="badge badge-up">Yes</span>
+              {% else %}
+                <span class="badge badge-down">No</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CPU / Processor -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Processor</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>CPU Model</th>
+            <th>Physical CPUs</th>
+            <th>Cores per CPU</th>
+            <th>Threads per Core</th>
+            <th>Total vCPUs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ ansible_processor[2] | default('N/A') }}</td>
+            <td>{{ ansible_processor_count | default('N/A') }}</td>
+            <td>{{ ansible_processor_cores | default('N/A') }}</td>
+            <td>{{ ansible_processor_threads_per_core | default('N/A') }}</td>
+            <td><strong>{{ ansible_processor_vcpus | default('N/A') }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Memory</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Total RAM</th>
+            <th>Used RAM</th>
+            <th>Free RAM</th>
+            <th>Usage</th>
+            <th>Swap Total</th>
+            <th>Swap Used</th>
+            <th>Swap Free</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set mem = ansible_memory_mb.real | default({}) %}
+          {% set mem_total = mem.total | default(0) | int %}
+          {% set mem_used = mem.used | default(0) | int %}
+          {% set mem_free = mem.free | default(0) | int %}
+          {% set mem_pct = ((mem_used / mem_total) * 100) | int if mem_total > 0 else 0 %}
+          <tr>
+            <td><strong>{{ mem_total }} MB</strong></td>
+            <td>{{ mem_used }} MB</td>
+            <td>{{ mem_free }} MB</td>
+            <td>
+              <div class="usage-bar">
+                <div class="usage-fill {% if mem_pct > 90 %}usage-critical{% elif mem_pct > 70 %}usage-warning{% else %}usage-ok{% endif %}" style="width: {{ mem_pct }}%"></div>
+              </div>
+              <span class="usage-text">{{ mem_pct }}%</span>
+            </td>
+            <td>{{ ansible_swaptotal_mb | default(0) }} MB</td>
+            <td>{{ (ansible_swaptotal_mb | default(0) | int) - (ansible_swapfree_mb | default(0) | int) }} MB</td>
+            <td>{{ ansible_swapfree_mb | default(0) }} MB</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Storage / Mounts -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Storage / Mount Points</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Mount Point</th>
+            <th>Device</th>
+            <th>Filesystem</th>
+            <th>Total</th>
+            <th>Used</th>
+            <th>Available</th>
+            <th>Usage</th>
+            <th>Options</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mount in ansible_mounts | default([]) | sort(attribute='mount') %}
+          {% set total_gb = (mount.size_total | default(0) | float / 1073741824) | round(1) %}
+          {% set avail_gb = (mount.size_available | default(0) | float / 1073741824) | round(1) %}
+          {% set used_gb = (total_gb - avail_gb) | round(1) %}
+          {% set disk_pct = (((total_gb - avail_gb) / total_gb) * 100) | int if total_gb > 0 else 0 %}
+          <tr>
+            <td><strong class="snippet">{{ mount.mount }}</strong></td>
+            <td class="snippet">{{ mount.device }}</td>
+            <td>{{ mount.fstype }}</td>
+            <td>{{ total_gb }} GB</td>
+            <td>{{ used_gb }} GB</td>
+            <td>{{ avail_gb }} GB</td>
+            <td>
+              <div class="usage-bar">
+                <div class="usage-fill {% if disk_pct > 90 %}usage-critical{% elif disk_pct > 70 %}usage-warning{% else %}usage-ok{% endif %}" style="width: {{ disk_pct }}%"></div>
+              </div>
+              <span class="usage-text">{{ disk_pct }}%</span>
+            </td>
+            <td style="font-size: 0.8em; max-width: 200px; word-break: break-all;">{{ mount.options | default('N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Hardware -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Hardware</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>System Vendor</th>
+            <th>Product Name</th>
+            <th>Form Factor</th>
+            <th>BIOS Vendor</th>
+            <th>BIOS Version</th>
+            <th>BIOS Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ ansible_system_vendor | default('N/A') }}</td>
+            <td>{{ ansible_product_name | default('N/A') }}</td>
+            <td>{{ ansible_form_factor | default('N/A') }}</td>
+            <td>{{ ansible_bios_vendor | default('N/A') }}</td>
+            <td>{{ ansible_bios_version | default('N/A') }}</td>
+            <td>{{ ansible_bios_date | default('N/A') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Virtualization -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Virtualization</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Role</th>
+            <th>Guest Technologies</th>
+            <th>Host Technologies</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{ ansible_virtualization_type | default('N/A') }}</strong></td>
+            <td>{{ ansible_virtualization_role | default('N/A') }}</td>
+            <td>
+              {% for tech in ansible_virtualization_tech_guest | default([]) %}
+              <span class="badge badge-info">{{ tech }}</span>
+              {% endfor %}
+              {% if not ansible_virtualization_tech_guest | default([]) %}N/A{% endif %}
+            </td>
+            <td>
+              {% for tech in ansible_virtualization_tech_host | default([]) %}
+              <span class="badge badge-info">{{ tech }}</span>
+              {% endfor %}
+              {% if not ansible_virtualization_tech_host | default([]) %}N/A{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Operating System Details -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Operating System</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Distribution</th>
+            <th>Version</th>
+            <th>Release</th>
+            <th>OS Family</th>
+            <th>Kernel</th>
+            <th>Kernel Version</th>
+            <th>Package Manager</th>
+            <th>Service Manager</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{ ansible_distribution }}</strong></td>
+            <td>{{ ansible_distribution_version }}</td>
+            <td>{{ ansible_distribution_release | default('N/A') }}</td>
+            <td>{{ ansible_os_family | default('N/A') }}</td>
+            <td class="snippet">{{ ansible_kernel }}</td>
+            <td class="snippet">{{ ansible_kernel_version | default('N/A') }}</td>
+            <td>{{ ansible_pkg_mgr | default('N/A') }}</td>
+            <td>{{ ansible_service_mgr | default('N/A') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Security -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Security</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>SELinux Status</th>
+            <th>SELinux Mode</th>
+            <th>SELinux Type</th>
+            <th>AppArmor Status</th>
+            <th>FIPS Mode</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              {% if ansible_selinux.status | default('disabled') == 'enabled' %}
+                <span class="badge badge-up">Enabled</span>
+              {% else %}
+                <span class="badge badge-down">Disabled</span>
+              {% endif %}
+            </td>
+            <td>{{ ansible_selinux.mode | default('N/A') }}</td>
+            <td>{{ ansible_selinux.type | default('N/A') }}</td>
+            <td>
+              {% if ansible_apparmor.status | default('disabled') == 'enabled' %}
+                <span class="badge badge-up">Enabled</span>
+              {% else %}
+                <span class="badge badge-down">Disabled</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ansible_fips | default(false) %}
+                <span class="badge badge-up">Enabled</span>
+              {% else %}
+                <span class="badge badge-down">Disabled</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Python & Environment -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Environment</h3>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Python Version</th>
+            <th>System</th>
+            <th>Machine ID</th>
+            <th>Domain</th>
+            <th>Ansible Groups</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="snippet">{{ ansible_python_version | default('N/A') }}</td>
+            <td>{{ ansible_system | default('N/A') }}</td>
+            <td class="snippet" style="font-size: 0.8em;">{{ ansible_machine_id | default('N/A') }}</td>
+            <td>{{ ansible_domain | default('N/A') }}</td>
+            <td>
+              {% for grp in group_names | default([]) %}
+              <span class="badge badge-info">{{ grp }}</span>
+              {% endfor %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>

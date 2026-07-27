@@ -1,0 +1,311 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h3>Host Overview</h3>
+      <span id="host-count" style="font-size: 0.85em; color: #64748b;"></span>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-row">
+        <div class="filter-search">
+          <input type="text" id="search-input" placeholder="Search hosts, IPs, OS, kernel..." autocomplete="off">
+        </div>
+      </div>
+      <div class="filter-row" id="filter-groups">
+        <span class="filter-label">Groups:</span>
+      </div>
+      <div class="filter-row" id="filter-os">
+        <span class="filter-label">OS:</span>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Usage:</span>
+        <button class="filter-chip" data-filter="usage" data-value="mem70">Mem &gt; 70%</button>
+        <button class="filter-chip" data-filter="usage" data-value="mem90">Mem &gt; 90%</button>
+        <button class="filter-chip" data-filter="usage" data-value="disk70">Disk &gt; 70%</button>
+        <button class="filter-chip" data-filter="usage" data-value="disk90">Disk &gt; 90%</button>
+        <span style="flex:1"></span>
+        <button class="filter-chip filter-reset" id="clear-filters">Clear All</button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <table id="host-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Groups</th>
+            <th>Main IP</th>
+            <th>OS</th>
+            <th>Kernel</th>
+            <th>vCPUs</th>
+            <th>RAM</th>
+            <th>Mem Usage</th>
+            <th>Disk Usage</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for host in groups[target_nodes | default('all')] | default([]) | sort %}
+          {% set hv = hostvars[host] | default({}) %}
+          {% set mem = hv.ansible_memory_mb.real | default({}) if hv.ansible_memory_mb is defined else {} %}
+          {% set mem_total = mem.total | default(0) | int %}
+          {% set mem_used = mem.used | default(0) | int %}
+          {% set mem_pct = ((mem_used / mem_total) * 100) | int if mem_total > 0 else 0 %}
+          {% set root_mount = hv.ansible_mounts | default([]) | selectattr('mount', 'equalto', '/') | first | default({}) %}
+          {% set disk_total = (root_mount.size_total | default(0) | float / 1073741824) | round(1) %}
+          {% set disk_avail = (root_mount.size_available | default(0) | float / 1073741824) | round(1) %}
+          {% set disk_pct = (((disk_total - disk_avail) / disk_total) * 100) | int if disk_total > 0 else 0 %}
+          <tr data-mem-pct="{{ mem_pct }}" data-disk-pct="{{ disk_pct }}">
+            <td><a href="{{ host }}.html"><strong>{{ host }}</strong></a></td>
+            <td>
+              {% for grp in hv.group_names | default([]) %}
+              <span class="badge badge-info">{{ grp }}</span>
+              {% endfor %}
+            </td>
+            <td class="snippet">{{ hv.ansible_default_ipv4.address | default('N/A') }}</td>
+            <td>{{ hv.ansible_distribution | default('N/A') }} {{ hv.ansible_distribution_version | default('') }}</td>
+            <td class="snippet" style="font-size: 0.8em;">{{ hv.ansible_kernel | default('N/A') }}</td>
+            <td>{{ hv.ansible_processor_vcpus | default('N/A') }}</td>
+            <td>{{ ((mem_total / 1024) | round(1)) if mem_total > 0 else 'N/A' }} GB</td>
+            <td>
+              {% if mem_total > 0 %}
+              <div class="usage-bar">
+                <div class="usage-fill {% if mem_pct > 90 %}usage-critical{% elif mem_pct > 70 %}usage-warning{% else %}usage-ok{% endif %}" style="width: {{ mem_pct }}%"></div>
+              </div>
+              <span class="usage-text">{{ mem_pct }}% ({{ mem_used }}/{{ mem_total }} MB)</span>
+              {% else %}
+              N/A
+              {% endif %}
+            </td>
+            <td>
+              {% if disk_total > 0 %}
+              <div class="usage-bar">
+                <div class="usage-fill {% if disk_pct > 90 %}usage-critical{% elif disk_pct > 70 %}usage-warning{% else %}usage-ok{% endif %}" style="width: {{ disk_pct }}%"></div>
+              </div>
+              <span class="usage-text">{{ disk_pct }}% ({{ (disk_total - disk_avail) | round(1) }}/{{ disk_total }} GB)</span>
+              {% else %}
+              N/A
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-bar" id="pagination-bar">
+      <div class="pagination-left">
+        <label>Show
+          <select id="page-size">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="0">All</option>
+          </select>
+          per page
+        </label>
+      </div>
+      <div class="pagination-center" id="page-buttons"></div>
+      <div class="pagination-right" id="page-info"></div>
+    </div>
+  </div>
+</div>
+
+{% raw %}
+<script>
+(function() {
+  var table = document.getElementById('host-table');
+  var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+  var searchInput = document.getElementById('search-input');
+  var countEl = document.getElementById('host-count');
+  var activeGroups = {};
+  var activeOS = {};
+  var activeUsage = {};
+  var currentPage = 1;
+  var pageSize = 25;
+  var filteredRows = [];
+  var pageSizeSelect = document.getElementById('page-size');
+  var pageButtons = document.getElementById('page-buttons');
+  var pageInfo = document.getElementById('page-info');
+
+  // Build group chips
+  var groups = {};
+  rows.forEach(function(r) {
+    var badges = r.querySelectorAll('td:nth-child(2) .badge');
+    badges.forEach(function(b) { groups[b.textContent.trim()] = true; });
+  });
+  var groupContainer = document.getElementById('filter-groups');
+  Object.keys(groups).sort().forEach(function(g) {
+    var btn = document.createElement('button');
+    btn.className = 'filter-chip';
+    btn.setAttribute('data-filter', 'group');
+    btn.setAttribute('data-value', g);
+    btn.textContent = g;
+    btn.addEventListener('click', function() {
+      if (activeGroups[g]) { delete activeGroups[g]; btn.classList.remove('active'); }
+      else { activeGroups[g] = true; btn.classList.add('active'); }
+      applyFilters();
+    });
+    groupContainer.appendChild(btn);
+  });
+
+  // Build OS chips
+  var osMap = {};
+  rows.forEach(function(r) {
+    var os = r.querySelector('td:nth-child(4)').textContent.trim();
+    if (os && os !== 'N/A') osMap[os] = true;
+  });
+  var osContainer = document.getElementById('filter-os');
+  Object.keys(osMap).sort().forEach(function(o) {
+    var btn = document.createElement('button');
+    btn.className = 'filter-chip';
+    btn.setAttribute('data-filter', 'os');
+    btn.setAttribute('data-value', o);
+    btn.textContent = o;
+    btn.addEventListener('click', function() {
+      if (activeOS[o]) { delete activeOS[o]; btn.classList.remove('active'); }
+      else { activeOS[o] = true; btn.classList.add('active'); }
+      applyFilters();
+    });
+    osContainer.appendChild(btn);
+  });
+
+  // Usage filter buttons
+  var usageBtns = document.querySelectorAll('[data-filter="usage"]');
+  usageBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var v = btn.getAttribute('data-value');
+      if (activeUsage[v]) { delete activeUsage[v]; btn.classList.remove('active'); }
+      else { activeUsage[v] = true; btn.classList.add('active'); }
+      applyFilters();
+    });
+  });
+
+  // Search
+  searchInput.addEventListener('input', function() { applyFilters(); });
+
+  // Clear all
+  document.getElementById('clear-filters').addEventListener('click', function() {
+    activeGroups = {}; activeOS = {}; activeUsage = {};
+    searchInput.value = '';
+    document.querySelectorAll('.filter-chip.active').forEach(function(b) { b.classList.remove('active'); });
+    applyFilters();
+  });
+
+  // Page size change
+  pageSizeSelect.addEventListener('change', function() {
+    pageSize = parseInt(this.value);
+    currentPage = 1;
+    applyFilters();
+  });
+
+  function applyFilters() {
+    var query = searchInput.value.toLowerCase();
+    var gKeys = Object.keys(activeGroups);
+    var oKeys = Object.keys(activeOS);
+    filteredRows = [];
+
+    rows.forEach(function(r) {
+      var text = r.textContent.toLowerCase();
+      var show = true;
+
+      if (query && text.indexOf(query) === -1) show = false;
+
+      if (show && gKeys.length > 0) {
+        var badges = Array.prototype.slice.call(r.querySelectorAll('td:nth-child(2) .badge'));
+        var rowGroups = badges.map(function(b) { return b.textContent.trim(); });
+        var match = gKeys.some(function(g) { return rowGroups.indexOf(g) !== -1; });
+        if (!match) show = false;
+      }
+
+      if (show && oKeys.length > 0) {
+        var os = r.querySelector('td:nth-child(4)').textContent.trim();
+        if (oKeys.indexOf(os) === -1) show = false;
+      }
+
+      if (show) {
+        var memPct = parseInt(r.getAttribute('data-mem-pct') || '0');
+        var diskPct = parseInt(r.getAttribute('data-disk-pct') || '0');
+        if (activeUsage['mem70'] && memPct <= 70) show = false;
+        if (activeUsage['mem90'] && memPct <= 90) show = false;
+        if (activeUsage['disk70'] && diskPct <= 70) show = false;
+        if (activeUsage['disk90'] && diskPct <= 90) show = false;
+      }
+
+      r.style.display = 'none';
+      if (show) filteredRows.push(r);
+    });
+
+    var totalPages = pageSize > 0 ? Math.ceil(filteredRows.length / pageSize) : 1;
+    if (currentPage > totalPages) currentPage = totalPages || 1;
+    renderPage();
+    countEl.textContent = filteredRows.length + ' of ' + rows.length + ' hosts';
+  }
+
+  function renderPage() {
+    var total = filteredRows.length;
+    var totalPages = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
+    var start = pageSize > 0 ? (currentPage - 1) * pageSize : 0;
+    var end = pageSize > 0 ? Math.min(start + pageSize, total) : total;
+
+    filteredRows.forEach(function(r, i) {
+      r.style.display = (i >= start && i < end) ? '' : 'none';
+    });
+
+    // Page info
+    if (total > 0) {
+      pageInfo.textContent = (start + 1) + '–' + end + ' of ' + total;
+    } else {
+      pageInfo.textContent = '0 of 0';
+    }
+
+    // Page buttons
+    pageButtons.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    var prev = document.createElement('button');
+    prev.className = 'page-btn';
+    prev.textContent = '← Prev';
+    prev.disabled = currentPage <= 1;
+    prev.addEventListener('click', function() { currentPage--; renderPage(); });
+    pageButtons.appendChild(prev);
+
+    var maxBtns = 7;
+    var startPage = Math.max(1, currentPage - Math.floor(maxBtns / 2));
+    var endPage = Math.min(totalPages, startPage + maxBtns - 1);
+    if (endPage - startPage < maxBtns - 1) startPage = Math.max(1, endPage - maxBtns + 1);
+
+    if (startPage > 1) {
+      pageButtons.appendChild(makePageBtn(1));
+      if (startPage > 2) { var d = document.createElement('span'); d.className = 'page-dots'; d.textContent = '...'; pageButtons.appendChild(d); }
+    }
+    for (var p = startPage; p <= endPage; p++) {
+      pageButtons.appendChild(makePageBtn(p));
+    }
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) { var d2 = document.createElement('span'); d2.className = 'page-dots'; d2.textContent = '...'; pageButtons.appendChild(d2); }
+      pageButtons.appendChild(makePageBtn(totalPages));
+    }
+
+    var next = document.createElement('button');
+    next.className = 'page-btn';
+    next.textContent = 'Next →';
+    next.disabled = currentPage >= totalPages;
+    next.addEventListener('click', function() { currentPage++; renderPage(); });
+    pageButtons.appendChild(next);
+  }
+
+  function makePageBtn(p) {
+    var btn = document.createElement('button');
+    btn.className = 'page-btn' + (p === currentPage ? ' page-active' : '');
+    btn.textContent = p;
+    btn.addEventListener('click', function() { currentPage = p; renderPage(); });
+    return btn;
+  }
+
+  applyFilters();
+})();
+</script>
+{% endraw %}

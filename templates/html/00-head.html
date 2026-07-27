@@ -1,0 +1,385 @@
+    <head>
+    <title>{{ report_title | default('NA') }} | Ansible CMDB Report</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+    {% raw %}
+    <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background-color: #f5f7fa;
+      font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #2d3748;
+    }
+    .top-banner {
+      background: linear-gradient(135deg, #a30000 0%, #ee0000 100%);
+      color: #ffffff;
+      padding: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .banner-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 25px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .banner-left h1 {
+      font-size: 1.75em;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 5px;
+    }
+    .banner-subtitle {
+      font-size: 0.9em;
+      opacity: 0.9;
+      font-weight: 400;
+    }
+    .banner-right {
+      text-align: right;
+    }
+    .banner-meta {
+      font-size: 0.85em;
+      opacity: 0.9;
+    }
+    .banner-meta div {
+      margin: 3px 0;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 30px auto;
+      padding: 0 30px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e2e8f0;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 15px 25px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .card-header h2, .card-header h3 {
+      font-size: 1.1em;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+    .card-body {
+      padding: 0;
+    }
+    .snippet {
+      font-family: ui-monospace,
+                 Menlo, Monaco,
+                 "Cascadia Mono", "Segoe UI Mono",
+                 "Roboto Mono",
+                 "Oxygen Mono",
+                 "Ubuntu Monospace",
+                 "Source Code Pro",
+                 "Fira Mono",
+                 "Droid Sans Mono",
+                 "Courier New", monospace;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead {
+      background: #f8fafc;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    th {
+      padding: 12px 25px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.85em;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 14px 25px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.9em;
+      vertical-align: top;
+    }
+    tbody tr {
+      transition: background 0.2s;
+    }
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+    p {
+      margin: 4px 0;
+    }
+    a {
+      color: #cc0000;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+      color: #a30000;
+    }
+    .green-cell {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
+    .red-cell {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+    .gray-cell {
+      background-color: #f1f5f9;
+      color: #475569;
+    }
+    footer {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 30px 0;
+      margin-top: 50px;
+    }
+    .footer-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 30px;
+      text-align: center;
+    }
+    .footer-content p {
+      margin: 5px 0;
+      font-size: 0.9em;
+    }
+    .footer-brand {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+    .footer-content a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer-content a:hover {
+      color: #e2e8f0;
+      text-decoration: underline;
+    }
+    .usage-bar {
+      background: #e2e8f0;
+      border-radius: 4px;
+      height: 14px;
+      width: 100%;
+      min-width: 80px;
+      overflow: hidden;
+      margin-bottom: 2px;
+    }
+    .usage-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .usage-ok { background: #22c55e; }
+    .usage-warning { background: #f59e0b; }
+    .usage-critical { background: #ef4444; }
+    .usage-text {
+      font-size: 0.75em;
+      color: #64748b;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75em;
+      font-weight: 600;
+      margin: 1px 2px;
+    }
+    .badge-up {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge-down {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .badge-info {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+    .pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 25px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      font-size: 0.85em;
+      color: #475569;
+    }
+    .pagination-left select {
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 1em;
+      margin: 0 4px;
+      outline: none;
+    }
+    .pagination-left select:focus {
+      border-color: #cc0000;
+    }
+    .pagination-center {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .page-btn {
+      padding: 4px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #ffffff;
+      font-family: inherit;
+      font-size: 0.9em;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) {
+      border-color: #cc0000;
+      color: #cc0000;
+    }
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .page-active {
+      background: #cc0000;
+      color: #ffffff;
+      border-color: #cc0000;
+    }
+    .page-active:hover {
+      background: #a30000;
+      color: #ffffff;
+      border-color: #a30000;
+    }
+    .page-dots {
+      padding: 0 4px;
+      color: #94a3b8;
+    }
+    .filter-bar {
+      padding: 15px 25px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .filter-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .filter-row:last-child {
+      margin-bottom: 0;
+    }
+    .filter-label {
+      font-size: 0.8em;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 55px;
+    }
+    .filter-search {
+      flex: 1;
+    }
+    .filter-search input {
+      width: 100%;
+      padding: 8px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.9em;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .filter-search input:focus {
+      border-color: #cc0000;
+      box-shadow: 0 0 0 2px rgba(204,0,0,0.1);
+    }
+    .filter-chip {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 0.78em;
+      font-weight: 500;
+      font-family: inherit;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-chip:hover {
+      border-color: #94a3b8;
+      background: #f1f5f9;
+    }
+    .filter-chip.active {
+      background: #cc0000;
+      color: #ffffff;
+      border-color: #cc0000;
+    }
+    .filter-chip.active:hover {
+      background: #a30000;
+      border-color: #a30000;
+    }
+    .filter-reset {
+      border-color: #e2e8f0;
+      color: #94a3b8;
+      font-size: 0.75em;
+    }
+    .filter-reset:hover {
+      color: #cc0000;
+      border-color: #cc0000;
+    }
+    .nav-home {
+      display: inline-block;
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-size: 0.85em;
+      font-weight: 500;
+      padding: 4px 12px;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+    .nav-home:hover {
+      background: rgba(255,255,255,0.15);
+      color: #ffffff;
+      text-decoration: none;
+      border-color: rgba(255,255,255,0.6);
+    }
+    @media (max-width: 768px) {
+      .banner-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+      }
+      .banner-right {
+        text-align: left;
+      }
+    }
+    </style>
+    {% endraw %}
+    </head>
